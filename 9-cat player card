@@ -1,0 +1,62 @@
+%pip install nba_api
+import pandas as pd; pd.set_option('display.max_columns', None)
+import json
+from nba_api.stats.endpoints import leagueleaders
+import warnings
+warnings.filterwarnings('ignore')
+from nba_api.stats import endpoints
+df = endpoints.leagueleaders.LeagueLeaders(season = '2023-24').league_leaders.get_data_frame()
+
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_columns', None)
+
+
+# Because df contains raw totals from the '23-24 season, we need to convert these totals into per-game stats
+def calculate_per_game_rates(player_data):
+    games_played = player_data['GP']
+    per_game_stats = {}
+    for stat in ['PTS', 'REB', 'AST', 'MIN', 'STL', 'BLK', 'TOV', 'FG3M', 'FGM', 'FGA', 'FTM', 'FTA']:
+        per_game_stats[f'{stat}_PerGame'] = player_data[stat] / games_played
+    return pd.Series(per_game_stats)
+
+# Convert FGM/FGA into field goal percentage (FG%)
+def calculate_fg_percentage(player_data):
+    fgm = player_data['FGM']
+    fga = player_data['FGA']
+    if fga == 0:
+        return 0
+    else:
+        return (fgm / fga) * 100
+
+# Convert FTM/FTA into free throw percentage (FT%)
+def calculate_ft_percentage(player_data):
+    ftm = player_data['FTM']
+    fta = player_data['FTA']
+    if fta == 0:
+        return 0
+    else:
+        return (ftm / fta) * 100
+
+# Create Per-Game and rate list
+def main(df):
+    per_game_stats_list = []
+
+    for index, player_data in df.iterrows():
+        per_game_stats = calculate_per_game_rates(player_data)
+        per_game_stats['PLAYER'] = player_data['PLAYER']  # Add player name to the results
+        per_game_stats['FG%'] = calculate_fg_percentage(player_data)  # Add FG%
+        per_game_stats['FT%'] = calculate_ft_percentage(player_data)  # Add FT%
+        per_game_stats_list.append(per_game_stats)
+
+    # Create a DataFrame from the list of per-game stats
+    per_game_df = pd.DataFrame(per_game_stats_list)
+
+    return per_game_df
+
+# Run the main function and print the results
+per_game_df = main(df)
+print("\nPer-Game Stats DataFrame:\n", per_game_df)
+
+# Select a specific player and print the card
+ninecat = per_game_df[df['PLAYER'] == 'Tyrese Haliburton']
+print(ninecat)
